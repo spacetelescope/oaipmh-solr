@@ -56,12 +56,14 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
         InputStream is = null;
         try {
             String url = context.getEntityAttribute(URL);
-
+            logger.info("URL " + url);
             HttpOAIClient client = new HttpOAIClient(url);
             Parameters parameters = new Parameters();
             parameters.withVerb(Verb.Type.ListRecords);
             parameters.withResumptionToken(null);
-            parameters.withMetadataPrefix(PREFIX);
+            String metadataPrefix = context.getEntityAttribute(PREFIX);
+            logger.info("Metadata prefix " + metadataPrefix);
+            parameters.withMetadataPrefix(metadataPrefix);
             Calendar fromCalendar = Calendar.getInstance();
             fromCalendar.set(2015, 6, 1);
             parameters.withFrom(fromCalendar.getTime());
@@ -78,12 +80,18 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
             
             //String expression = "/OAI-PMH/ListRecords/record";
             String expression = context.getEntityAttribute(FOR_EACH);
+            logger.info("For each expression " + expression);
             nodes = (NodeList) xpath.evaluate(expression, document, XPathConstants.NODESET);
         } catch (HttpException ex) {
+            logger.error("",ex);
         } catch (ParserConfigurationException ex) {
+            logger.error("",ex);
         } catch (SAXException ex) {
+            logger.error("",ex);
         } catch (IOException ex) {
+            logger.error("",ex);
         } catch (XPathExpressionException ex) {
+            logger.error("",ex);
         }
         
 
@@ -96,6 +104,8 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
 
 
         int len = nodes.getLength();
+        logger.info("Len = " + len);
+        logger.info("Current node = " + currentNode);
         if(currentNode >= len) return null;
         Node node = nodes.item(currentNode);
         for (Map<String, String> field : context.getAllEntityFields()) {
