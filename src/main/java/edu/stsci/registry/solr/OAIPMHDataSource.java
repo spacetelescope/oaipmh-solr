@@ -5,8 +5,8 @@
  */
 package edu.stsci.registry.solr;
 
-import com.lyncode.xoai.serviceprovider.client.HttpOAIClient;
 import java.util.Properties;
+import org.apache.http.client.HttpClient;
 import org.apache.solr.handler.dataimport.Context;
 import org.apache.solr.handler.dataimport.DataSource;
 
@@ -14,14 +14,14 @@ import org.apache.solr.handler.dataimport.DataSource;
  *
  * @author sweissman
  */
-public class OAIPMHDataSource extends DataSource<HttpOAIClient> {
+public class OAIPMHDataSource extends DataSource<HttpClient> {
 
     @Override
     public void init(Context cntxt, Properties prprts) {
     }
 
     @Override
-    public HttpOAIClient getData(String query) {
+    public HttpClient getData(String query) {
         return null;
     }
 
