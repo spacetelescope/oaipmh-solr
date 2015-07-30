@@ -72,6 +72,12 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
         httpClient = HttpClients.createDefault();
         process = context.currentProcess(); //DELTA_DUMP or ...
         lastImport = null;
+        
+        String waitStr = context.getEntityAttribute(WAIT_SECS);
+        if(waitStr != null){
+            waitSeconds = Integer.valueOf(waitStr);
+        }
+        
         if(process.equals(Context.FIND_DELTA)){
             deletedNodes = new ArrayList<>();
             Map<String,Object> stats = context.getStats();
@@ -112,7 +118,7 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
             currentNode = 0;
             nodes = null;
             String url = context.getEntityAttribute(URL);
-            
+                        
             URI uri = null;
             // If the resumption token exists, use it to retrieve rest of data set
             if(resumptionToken != null && !resumptionToken.equals("")){
@@ -160,6 +166,7 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
                 }else if(status == HttpStatus.SC_SERVICE_UNAVAILABLE && response.containsHeader("Retry-After")){
                     // Check to see if we need to wait to repeat the request
                     waitSeconds = Integer.getInteger(response.getFirstHeader("Retry-After").getValue());
+                    logger.info("Server requested wait time of " + waitSeconds + " seconds.");
                     // Add one just in case
                     waitSeconds++;
                 }else{
@@ -249,12 +256,26 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
                 if (field.get(XPATH) == null)
                     continue;
                 String expression = field.get(XPATH);
+                String dateTimeFormat = field.get("dateTimeFormat");
                     
                 //String value = xpath.evaluate(expression,node);
                 NodeList nList = (NodeList) xpath.evaluate(expression, node, XPathConstants.NODESET);
                 for(int i=0;i<nList.getLength();i++){
                     Node n = nList.item(i);
-                    valueList.add(n.getTextContent());
+                    String nTxt = n.getTextContent();
+                    if(dateTimeFormat != null){
+                        try {
+                            SimpleDateFormat recordDateFormat = new SimpleDateFormat(dateTimeFormat);
+                            Date recordDate = recordDateFormat.parse(nTxt);
+                            SimpleDateFormat solrDateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+                            String solrDateTxt = solrDateFormat.format(recordDate);
+                            valueList.add(solrDateTxt);
+                        } catch (ParseException ex) {
+                            logger.error(ex);
+                        }
+                    }else{
+                        valueList.add(nTxt);
+                    }
                     //logger.info("Found value for column " + field.get("column") + n.getTextContent());
                     
                 }
@@ -396,6 +417,8 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
   public static final String PREFIX = "prefix";
   
   public static final String XPATH = "xpath";
+  
+  public static final String WAIT_SECS = "wait";
   
   public static final String IDCOL = "idcol";
 
