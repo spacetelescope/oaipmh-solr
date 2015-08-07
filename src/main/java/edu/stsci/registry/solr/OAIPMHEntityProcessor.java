@@ -158,7 +158,7 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
                 if(waitSeconds > 0){
                     Thread.sleep(waitSeconds*1000);
                 }
-                logger.info("Request url: " + uri.toString());
+                logger.info("Request url: " + uri.toString() + " with wait time " + waitSeconds + " seconds.");
                 response = httpClient.execute(httpget);
                 int status = response.getStatusLine().getStatusCode();
                 if(status == HttpStatus.SC_OK){
