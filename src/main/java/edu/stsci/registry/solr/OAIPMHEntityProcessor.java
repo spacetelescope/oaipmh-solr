@@ -248,7 +248,12 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
                 return null;
             }
         }
-
+        
+        // Add catalog name to record
+        String catalog = context.getEntityAttribute(CATALOG);
+        String catalogField = context.getEntityAttribute(CATALOG_FIELD);
+        result.put(catalogField, catalog);
+        
         Node node = nodes.item(currentNode);
         for (Map<String, String> field : context.getAllEntityFields()) {
             try {
@@ -408,6 +413,9 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
     
   //Document fields
 
+  public static final String CATALOG = "catalog";
+  public static final String CATALOG_FIELD = "catalogField";
+    
   public static final String FOR_EACH = "forEach";
   
   public static final String FROM = "from";
