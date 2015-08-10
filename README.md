@@ -91,7 +91,7 @@ Entity attributes:
       <dataSource type="edu.stsci.registry.solr.OAIPMHDataSource" />
       <document>
         <entity name="record" 
-    	    url="http://vao.stsci.edu/directory/oai.aspx"
+    	    url="http://mysite.edu/oai2"
     	    processor="edu.stsci.registry.solr.OAIPMHEntityProcessor"
     	    forEach="/OAI-PMH/ListRecords/record"
     	    prefix="ivo_vor"
