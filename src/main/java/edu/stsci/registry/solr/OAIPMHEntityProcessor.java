@@ -37,6 +37,8 @@ import org.apache.solr.handler.dataimport.Context;
 import org.apache.solr.handler.dataimport.EntityProcessorBase;
 import org.apache.solr.handler.dataimport.SolrWriter;
 import org.apache.solr.handler.dataimport.config.ConfigNameConstants;
+import org.apache.solr.schema.IndexSchema;
+import org.apache.solr.schema.SchemaField;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -52,9 +54,12 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
     // Variables used for tracking nodes retrieved from OAIPMH
     private NodeList nodes;
     private List<Node> deletedNodes;
+    private List<Node> modifiedNodes;
     private int currentNode;
-    private List<Map<String,Object>> deltaNodes = null;
-    private int currentDeltaNode;
+    private int currentDeletedNode;
+    private int currentModifiedNode;
+    //private List<Map<String,Object>> deltaNodes = null;
+    //private int currentDeltaNode;
     private int waitSeconds = -1;
 
     private static final Logger logger = LogManager.getLogger(OAIPMHEntityProcessor.class.getName());
@@ -64,39 +69,87 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
     // The current process of Solr (DELTA_QUERY, etc.)
     private String process;
     private Date lastImport;
+    private boolean returnedRow = false;
     
     @Override
     public void init(Context context) {
         super.init(context);
+        logger.info("In init");
         rowIterator = null;
         httpClient = HttpClients.createDefault();
         process = context.currentProcess(); //DELTA_DUMP or ...
-        lastImport = null;
         
         String waitStr = context.getEntityAttribute(WAIT_SECS);
         if(waitStr != null){
             waitSeconds = Integer.valueOf(waitStr);
         }
         
+        
         if(process.equals(Context.FIND_DELTA)){
+            logger.info("Find delta");
             deletedNodes = new ArrayList<>();
+            modifiedNodes = new ArrayList<>();
             Map<String,Object> stats = context.getStats();
-            long docCount = (long) stats.get("docCount");
+            //long docCount = (long) stats.get("docCount");
+            //for(String key : stats.keySet()){
+            //    logger.info(key + " " + stats.get(key).toString());
+            //}
             // If we have no documents in the index, don't do a delta import
-            if(docCount > 0){
+            //logger.info("docCount = " + docCount);
+            // These stats aren't working (always 0) so don't rely on them
+            //if(docCount > 0){        
+            
                 Map<String,Object> importerMap = (Map<String,Object>) context.resolve(ConfigNameConstants.IMPORTER_NS_SHORT);
                 String lastIndexStr = (String) importerMap.get(SolrWriter.LAST_INDEX_KEY);
                 SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
                 try {
                     lastImport = dateFormat.parse(lastIndexStr);
+                    logger.info("lastImport: " + lastIndexStr);
                 } catch (ParseException ex) {
                     logger.error(ex);
                 }
-            }
+            //}
+                XPath xpath = XPathFactory.newInstance().newXPath();
+
+                while(true){
+                    boolean hasResumption = initNodes();
+                    logger.info("Delta found " + nodes.getLength() + " new nodes");                    
+
+                    while(currentNode < nodes.getLength()){
+                        logger.info("Current node: " + currentNode);
+                        Node node = nodes.item(currentNode);
+                        try {            
+                            Node nodeStat;
+                            
+                            nodeStat = (Node) xpath.evaluate(STATUS_EXPRESSION, node, XPathConstants.NODE);
+                            if(nodeStat != null){
+                                String status = nodeStat.getTextContent();
+                                if(status.equals("deleted")){
+                                    deletedNodes.add(node);
+                                }else{
+                                    modifiedNodes.add(node);
+                                }
+                                
+                            }else{
+                                modifiedNodes.add(node);
+                            }
+                        } catch (XPathExpressionException ex) {
+                            logger.error("Error getting node status",ex);
+                        }
+                        currentNode++;
+                    }
+                    if(!hasResumption) break;
+                }
+                logger.info("Found " + deletedNodes.size() + " deleted nodes.");
+                logger.info("Found " + modifiedNodes.size() + " new or modified nodes.");
+                currentDeletedNode = 0;
+                currentModifiedNode = 0;
+
 
         }
-        
+        /*
         if(process.equals(Context.DELTA_DUMP)){
+            logger.info("Delta dump");
             deltaNodes = new ArrayList<>();
             // This is where the modified node gets placed by DocBuilder. We just pull it back out.
             Map<String,Object> dtest = (Map<String,Object>) context.resolve(ConfigNameConstants.IMPORTER_NS_SHORT + ".delta");
@@ -106,11 +159,21 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
             }
             // Don't init nodes on a delta dump
         }else{
+        initNodes();
+        }
+        */
+        if(process.equals(Context.FULL_DUMP)){
+            logger.info("Full import");
             initNodes();
         }
+        
+        if(process.equals(Context.DELTA_DUMP)){
+            returnedRow = false;
+        }
+
     }
 
-    private void initNodes(){
+    boolean initNodes(){
         InputStream is = null;
 
         CloseableHttpResponse response = null;
@@ -132,7 +195,7 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
                 if(process.equals(Context.FIND_DELTA)){
                     // Check that we have a last Import date
                     if(lastImport == null)
-                        return;
+                        return false;
                     SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
                     from = dateFormat.format(lastImport);
                 }
@@ -140,7 +203,7 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
                 String metadataPrefix = context.getEntityAttribute(PREFIX);
                 if(metadataPrefix == null){
                     logger.error("Metadata prefix must be set for OAI-PMH data import.");
-                    return;
+                    return false;
                 }
                 uriBuilder.setParameter("metadataPrefix", metadataPrefix);
 
@@ -170,7 +233,7 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
                     // Add one just in case
                     waitSeconds++;
                 }else{
-                    return;
+                    return false;
                 }
             }
 
@@ -191,12 +254,21 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
             logger.info("Len = " + nodes.getLength());
 
 
+            // Get resumption token
             NodeList rtNodes = (NodeList) xpath.evaluate(RT_EXPRESSION, document, XPathConstants.NODESET);
             if(rtNodes.getLength() > 0){
                 Node node = rtNodes.item(0);
                 resumptionToken = node.getTextContent();
+                logger.info("Resumption token: " + resumptionToken);
+                if(resumptionToken == null || resumptionToken.equals("")){
+                    logger.info("No resumption token");
+                    return false;
+                }
+                return true;
             }else{
                 resumptionToken = null;
+                logger.info("No resumption token");
+                return false;
             }
         } catch (ParserConfigurationException ex) {
             logger.error(ex);
@@ -218,45 +290,20 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
                 }
             }
         }
+        return false;
     }
 
-
-    
-    @Override
-    public Map<String, Object> nextRow() {
-        //logger.info("In nextRow");
-
-        if(process.equals(Context.DELTA_DUMP)){
-            if(deltaNodes != null && currentDeltaNode < deltaNodes.size()){
-                Map<String,Object> returnNode = deltaNodes.get(currentDeltaNode);
-                currentDeltaNode++;
-                return returnNode;
-            }else{
-                return null;
-            }
-        }
-        
+    void processRecord(Map<String,Object> result, Node node){
         XPath xpath = XPathFactory.newInstance().newXPath();
-        Map<String,Object> result = new HashMap<>();
-
-        
-        if(nodes == null || currentNode >= nodes.getLength()){
-            if(resumptionToken != null && !resumptionToken.equals("")){
-                logger.info("Calling initNodes from nextRow");
-                initNodes();
-            }else{
-                return null;
-            }
-        }
-        
-        // Add catalog name to record
+        // Add catalog name to record. Does this ever work. Doesn't in deleted/modified case.
         String catalog = context.getEntityAttribute(CATALOG);
         String catalogField = context.getEntityAttribute(CATALOG_FIELD);
         result.put(catalogField, catalog);
-        
-        Node node = nodes.item(currentNode);
+        IndexSchema schema = context.getSolrCore().getLatestSchema();
         for (Map<String, String> field : context.getAllEntityFields()) {
             try {
+                SchemaField sf = schema.getField(field.get("column"));
+
                 List<String> valueList = new ArrayList<>();
                 if (field.get(XPATH) == null)
                     continue;
@@ -281,52 +328,83 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
                     }else{
                         valueList.add(nTxt);
                     }
-                    //logger.info("Found value for column " + field.get("column") + n.getTextContent());
+                    logger.info("Found value for column " + field.get("column") + n.getTextContent());
                     
                 }
-                //valueList.add(value);
-                result.put(field.get("column"), valueList);
+                // If the field is not multivalues put the first item from the valueList as the value of the field
+                if(sf != null && !sf.multiValued() && valueList.size() > 0){
+                    result.put(field.get("column"), valueList.get(0));
+                }else{
+                    result.put(field.get("column"), valueList);
+                }
 //                logger.info("Extracting field with expression " + expression + " field " + field.get("column") + " " + valueList);
             } catch (XPathExpressionException ex) {
             }
         }
+        
+    }
+    
+    @Override
+    public Map<String, Object> nextRow() {
+        logger.info("In nextRow");
+        // can get pk info from context.resolver
+
+
+        if(process.equals(Context.DELTA_DUMP)){
+            if(!returnedRow){
+                Map<String,Object> deltaMap = (Map<String,Object>) context.resolve("dih.delta");
+                returnedRow = true;
+                return deltaMap;
+            }else{
+                return null;
+            }
+            /*
+            // < or <=?
+            if(modifiedNodes != null && currentModifiedNode < modifiedNodes.size()){
+                Map<String,Object> result = new HashMap<>();
+                Node returnNode = modifiedNodes.get(currentModifiedNode);
+                processRecord(result, returnNode);
+                currentModifiedNode++;
+                return result;
+            }else{
+                return null;
+            }
+            */
+        }
+
+        
+        Map<String,Object> result = new HashMap<>();
+
+        
+        if(nodes == null || currentNode >= nodes.getLength()){
+            if(resumptionToken != null && !resumptionToken.equals("")){
+                logger.info("Calling initNodes from nextRow");
+                initNodes();
+            }else{
+                return null;
+            }
+        }
+        Node node = nodes.item(currentNode);
+        processRecord(result, node);
         currentNode++;
         return result;
     }
   
     @Override
     public Map<String, Object> nextModifiedRowKey() {
-        logger.info("In nextModifiedRow currentNode = " + currentNode); 
-        XPath xpath = XPathFactory.newInstance().newXPath();
+        logger.info("In nextModifiedRow currentModifiedNode = " + currentModifiedNode); 
+        //XPath xpath = XPathFactory.newInstance().newXPath();
         Map<String,Object> result = new HashMap<>();
 
-        if(nodes == null || currentNode >= nodes.getLength()){
-            if(resumptionToken != null && !resumptionToken.equals("")){
-                logger.info("Calling initNodes from nextModifiedRowKey");
-                initNodes();
-            }else{
-                currentNode = 0;
-                return null;
-            }
+        if(modifiedNodes == null || modifiedNodes.isEmpty() || currentModifiedNode >= modifiedNodes.size()){
+            logger.info("No more modified nodes.");
+            currentModifiedNode = 0;
+            return null;            
         }
-        Node node = nodes.item(currentNode);
-        try {            
-            Node nodeStat;
-
-            nodeStat = (Node) xpath.evaluate(STATUS_EXPRESSION, node, XPathConstants.NODE);
-            if(nodeStat != null){
-                String status = nodeStat.getTextContent();
-                if(status.equals("deleted")){
-                    deletedNodes.add(node);
-                    currentNode++;
-                    return null;
-                }
-            }
-        } catch (XPathExpressionException ex) {
-            logger.error(ex);
-        }
-
-
+        logger.info("Number of nodes = " + modifiedNodes.size());
+        Node node = modifiedNodes.get(currentModifiedNode);
+        processRecord(result,node);
+        /*
         for (Map<String, String> field : context.getAllEntityFields()) {
             try {
                 List<String> valueList = new ArrayList<>();
@@ -339,7 +417,7 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
                 for(int i=0;i<nList.getLength();i++){
                     Node n = nList.item(i);
                     valueList.add(n.getTextContent());
-                    //logger.info("Found value for column " + field.get("column") + n.getTextContent());
+                    logger.info("Found value for column " + field.get("column") + n.getTextContent());
                     
                 }
                 //valueList.add(value);
@@ -349,7 +427,8 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
                 logger.error(ex);
             }
         }
-        currentNode++;
+                */
+        currentModifiedNode++;
         return result;
     }
 
@@ -357,30 +436,16 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
     public Map<String, Object> nextDeletedRowKey() {
         Map<String,Object> result = new HashMap<>();
 
-        logger.info("In nextDeletedRow, currentNode = " + currentNode);
-        XPath xpath = XPathFactory.newInstance().newXPath();
-
+        logger.info("In nextDeletedRow, currentDeletedNode = " + currentDeletedNode);
+        
             
-        if(deletedNodes == null || deletedNodes.isEmpty() || currentNode > deletedNodes.size()){
+        if(deletedNodes == null || deletedNodes.isEmpty() || currentDeletedNode >= deletedNodes.size()){
             return null;
         }
-        Node node = deletedNodes.get(currentNode);
-            
-        try {            
-            Node nodeStat;
+        Node node = deletedNodes.get(currentDeletedNode);
+        processRecord(result,node);
 
-            nodeStat = (Node) xpath.evaluate(STATUS_EXPRESSION, node, XPathConstants.NODE);
-            if(nodeStat == null){
-                return null;
-            }
-            String status = nodeStat.getTextContent();
-            if(!status.equals("deleted")){
-                return null;
-            }
-        } catch (XPathExpressionException ex) {
-            java.util.logging.Logger.getLogger(OAIPMHEntityProcessor.class.getName()).log(Level.SEVERE, null, ex);
-        }
-
+/*
         String idCol = context.getEntityAttribute(IDCOL);
         
         for (Map<String, String> field : context.getAllEntityFields()) {
@@ -402,7 +467,8 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
                 logger.error(ex);
             }
         }
-        currentNode++;
+        */
+        currentDeletedNode++;
         if(result.isEmpty()){
             return null;
         }else{
@@ -432,6 +498,6 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
 
   public static final String RT_EXPRESSION = "/OAI-PMH/ListRecords/resumptionToken";
 
-  public static final String STATUS_EXPRESSION = "header[@status]";
+  public static final String STATUS_EXPRESSION = "header/@status";
   
 }
