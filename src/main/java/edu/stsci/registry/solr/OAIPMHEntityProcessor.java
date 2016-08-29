@@ -58,8 +58,7 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
     private int currentNode;
     private int currentDeletedNode;
     private int currentModifiedNode;
-    //private List<Map<String,Object>> deltaNodes = null;
-    //private int currentDeltaNode;
+
     private int waitSeconds = -1;
 
     private static final Logger logger = LogManager.getLogger(OAIPMHEntityProcessor.class.getName());
@@ -283,10 +282,14 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
     void processRecord(Map<String,Object> result, Node node){
         XPath xpath = XPathFactory.newInstance().newXPath();
 
-        // Add catalog name to record. Does this ever work. Doesn't in deleted/modified case.
+        // Add catalog name to record. If indexing from multiple OAI-PMH catalogs, the catalog field lets you
+        // distinguish between sources for a record. This is configured in the entity attributes.
         String catalog = context.getEntityAttribute(CATALOG);
         String catalogField = context.getEntityAttribute(CATALOG_FIELD);
-        result.put(catalogField, catalog);
+        if(catalogField != null && catalog != null){
+            result.put(catalogField, catalog);
+        }
+        
         IndexSchema schema = context.getSolrCore().getLatestSchema();
         for (Map<String, String> field : context.getAllEntityFields()) {
             try {
