@@ -253,11 +253,14 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
             DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
             DocumentBuilder db = dbf.newDocumentBuilder();
             Document document = db.parse(inputSource);
-            
+           
             String expression = context.getEntityAttribute(FOR_EACH);
             nodes = (NodeList) xpath.evaluate(expression, document, XPathConstants.NODESET);
             logger.info("Len = " + nodes.getLength());
 
+            if(nodes.getLength() == 0){
+                logger.error("No nodes found when getting nodes from document: " + documentToString(document));
+            }
             // Get resumption token if there is one
             NodeList rtNodes = (NodeList) xpath.evaluate(RT_EXPRESSION, document, XPathConstants.NODESET);
             if(rtNodes.getLength() > 0){
@@ -378,6 +381,12 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
             if(nodes == null || currentNode >= nodes.getLength()){
                 if(resumptionToken != null && !resumptionToken.equals("")){
                     getNextNodes();
+                    // If we go to get nodes and there are no nodes (why does this happen)
+                    if(nodes.getLength() == 0){
+                        logger.error("No nodes returned by resumption token");
+                        return null;
+                    }
+
                 }else{
                     return null;
                 }
@@ -458,6 +467,18 @@ public class OAIPMHEntityProcessor extends EntityProcessorBase{
         }
     }
     
+    private String documentToString(Document document) {
+        try {
+            StringWriter writer = new StringWriter();
+            Transformer transformer = TransformerFactory.newInstance().newTransformer();
+            transformer.transform(new DOMSource(document), new StreamResult(writer));
+            String xml = writer.toString();
+            return xml;
+        } catch (TransformerException ex) {
+            return "Problem converting to string";
+        }
+
+    }
     private String nodeToString(Node node) {
         try {
             StringWriter writer = new StringWriter();
