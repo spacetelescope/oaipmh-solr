@@ -25,7 +25,7 @@ To install the OAI-PMH , simply download the library and run
 from the command line.
 Then copy the generated jar from the targets directory to the lib directory of your core.
 
-You may want to modify pom.xml Solr dependencies to correspond to your version of Solr. This plugin has been tested against 5.2.1 and 4.10.2.
+You may want to modify pom.xml Solr dependencies to correspond to your version of Solr.
 
 ## Configuration
 
