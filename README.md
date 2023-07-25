@@ -14,7 +14,7 @@ This plug-in implements an OAI-PMH data import handler for Solr. The data import
 
 ## Requirements
 
-Version 2.0 of this library is build for solr 8 and tested agaist solr 8.11. Note that the data import library has been deprecated and will be removed in Solr 9.
+Version 2.0 of this library is built for solr 8 and tested against solr 8.11. Note that the data import library has been deprecated and will be removed in Solr 9.
 
 ## Installation
 
