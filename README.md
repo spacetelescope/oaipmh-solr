@@ -12,6 +12,10 @@ This plug-in implements an OAI-PMH data import handler for Solr. The data import
 
 **Note**: While this library has been successfully used to harvest records from registries using oai\_dc and ivo\_vo metadata formats, it is a work in progress and is still in testing. Please report any bugs in the issues section.
 
+## Requirements
+
+Version 2.0 of this library is built for solr 8 and tested against solr 8.11. Note that the data import library has been deprecated and will be removed in Solr 9.
+
 ## Installation
 
 To install the OAI-PMH , simply download the library and run
@@ -21,7 +25,7 @@ To install the OAI-PMH , simply download the library and run
 from the command line.
 Then copy the generated jar from the targets directory to the lib directory of your core.
 
-You may want to modify pom.xml Solr dependencies to correspond to your version of Solr. This plugin has been tested against 5.2.1 and 4.10.2.
+You may want to modify pom.xml Solr dependencies to correspond to your version of Solr.
 
 ## Configuration
 
@@ -42,7 +46,7 @@ Entity attributes:
 * **name** - *Required.* A field required by Solr.
 * **catalog** - (Used on conjunction with the catalogField attribute.) The name of the catalog. This value is stored in the field specified by catalogField.
 * **catalogField** - (Used in conjunction with the catalog attribute.) Name of the Solr field where the catalog name is stored.
-* **from** - Date to start record request from. 
+* **from** - Date to start record request from.
 * **url** - *Required.* The URL of the OAI-PMH provider interface.
 * **processor** - *Required.* Must be set to "edu.stsci.registry.solr.OAIPMHEntityProcessor"
 * **forEach** - *Required.* The path to the record element in the XML document.
@@ -82,7 +86,7 @@ Entity attributes:
             <field column="rights_s" xpath="metadata/dc/rights"/>
         </entity>
       </document>
-    </dataConfig> 
+    </dataConfig>
 
 
 ### VO Metadata example
@@ -90,7 +94,7 @@ Entity attributes:
     <dataConfig>
       <dataSource type="edu.stsci.registry.solr.OAIPMHDataSource" />
       <document>
-        <entity name="record" 
+        <entity name="record"
     	    url="http://mysite.edu/oai2"
     	    processor="edu.stsci.registry.solr.OAIPMHEntityProcessor"
     	    forEach="/OAI-PMH/ListRecords/record"
@@ -133,4 +137,14 @@ Entity attributes:
     -->
         </entity>
       </document>
-    </dataConfig> 
+    </dataConfig>
+
+## Test Script
+
+There is a simple test script that demonstrates how to parse the output of the MAST registry OAI-PMH endpoint.
+
+Once the jar is built, you should be able to run this script with the following command:
+
+    java -cp target/lib/httpclient-4.4.1.jar:target/lib/httpcore-4.4.14.jar:target/lib/commons-logging-1.2.jar src/test/java/edu/stsci/registry/solr/TestOAI.java
+
+The script does a single call, parses fields out of the records and also prints the resumption token.

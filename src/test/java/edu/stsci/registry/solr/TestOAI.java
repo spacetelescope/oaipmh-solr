@@ -88,7 +88,11 @@ public class TestOAI {
             */
             String expression = "/OAI-PMH/ListRecords/record";
             NodeList nodes = (NodeList) xpath.evaluate("/OAI-PMH/ListRecords/resumptionToken", document, XPathConstants.NODESET);
-            //NodeList nodes = (NodeList) xpath.evaluate(expression, document, XPathConstants.NODESET);
+            for(int i=0;i<nodes.getLength();i++) {
+                Node node = nodes.item(i);
+                System.out.println("Resumption token: " + node.getTextContent());
+            }
+            nodes = (NodeList) xpath.evaluate(expression, document, XPathConstants.NODESET);
             //String responseDate = xpath.evaluate(expression, document);
             //System.out.println("response date " + responseDate);
 
@@ -96,8 +100,6 @@ public class TestOAI {
             System.out.println("------------------------>Len = " + len);
             for(int i=0;i<nodes.getLength();i++){
                 Node node = nodes.item(i);
-                System.out.println("Resumption token: " + node.getTextContent());
-                /*
                 String id = xpath.evaluate("header/identifier", node);
                 System.out.println("Id = " + id);
                 String description = xpath.evaluate("metadata/Resource/title", node);
@@ -112,7 +114,6 @@ public class TestOAI {
                 System.out.println("Date " + date);
                 String instrument = xpath.evaluate("metadata/Resource/instrument", node);
                 System.out.println("Instrument " + instrument);
-                */
             }
         } catch (Exception ex) {
             ex.printStackTrace(System.err);
